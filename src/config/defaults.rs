@@ -130,11 +130,11 @@ pub(crate) fn default_middle_proxy_warm_standby() -> usize {
 }
 
 pub(crate) fn default_keepalive_interval() -> u64 {
-    25
+    8
 }
 
 pub(crate) fn default_keepalive_jitter() -> u64 {
-    5
+    2
 }
 
 pub(crate) fn default_warmup_step_delay_ms() -> u64 {

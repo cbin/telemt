@@ -1168,6 +1168,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         if listen.port() != 0 {
             let stats = stats.clone();
             let ip_tracker_api = ip_tracker.clone();
+            let me_pool_api = me_pool.clone();
             let config_rx_api = config_rx.clone();
             let config_path_api = std::path::PathBuf::from(&config_path);
             tokio::spawn(async move {
@@ -1175,6 +1176,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                     listen,
                     stats,
                     ip_tracker_api,
+                    me_pool_api,
                     config_rx_api,
                     config_path_api,
                 )

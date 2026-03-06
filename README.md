@@ -79,7 +79,7 @@ We welcome ideas, architectural feedback, and pull requests.
 
 ⚓ Our implementation of **TLS-fronting** is one of the most deeply debugged, focused, advanced and *almost* **"behaviorally consistent to real"**:  we are confident we have it right - [see evidence on our validation and traces](#recognizability-for-dpi-and-crawler)
 
-⚓ Our ***Middle-End Pool*** is fastest by design in standard scenarios, compared to other implementations of connecting to he Middle-End Proxy: non dramatically, but usual
+⚓ Our ***Middle-End Pool*** is fastest by design in standard scenarios, compared to other implementations of connecting to the Middle-End Proxy: non dramatically, but usual
 
 # GOTO
 - [Features](#features)

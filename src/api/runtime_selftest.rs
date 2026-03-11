@@ -1,11 +1,14 @@
 use std::net::IpAddr;
+use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 
+use crate::config::{ProxyConfig, UpstreamType};
 use crate::network::probe::{detect_interface_ipv4, detect_interface_ipv6, is_bogon};
-use crate::transport::middle_proxy::{bnd_snapshot, timeskew_snapshot};
+use crate::transport::middle_proxy::{bnd_snapshot, timeskew_snapshot, upstream_bnd_snapshots};
+use crate::transport::UpstreamRouteKind;
 
 use super::ApiShared;
 
@@ -66,12 +69,25 @@ pub(super) struct RuntimeMeSelftestBndData {
 }
 
 #[derive(Serialize)]
+pub(super) struct RuntimeMeSelftestUpstreamData {
+    pub(super) upstream_id: usize,
+    pub(super) route_kind: &'static str,
+    pub(super) address: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) bnd: Option<RuntimeMeSelftestBndData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) ip: Option<String>,
+}
+
+#[derive(Serialize)]
 pub(super) struct RuntimeMeSelftestPayload {
     pub(super) kdf: RuntimeMeSelftestKdfData,
     pub(super) timeskew: RuntimeMeSelftestTimeskewData,
     pub(super) ip: RuntimeMeSelftestIpData,
     pub(super) pid: RuntimeMeSelftestPidData,
-    pub(super) bnd: RuntimeMeSelftestBndData,
+    pub(super) bnd: Option<RuntimeMeSelftestBndData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) upstreams: Option<Vec<RuntimeMeSelftestUpstreamData>>,
 }
 
 #[derive(Serialize)]
@@ -98,7 +114,10 @@ fn kdf_ewma_state() -> &'static Mutex<KdfEwmaState> {
     KDF_EWMA_STATE.get_or_init(|| Mutex::new(KdfEwmaState::default()))
 }
 
-pub(super) async fn build_runtime_me_selftest_data(shared: &ApiShared) -> RuntimeMeSelftestData {
+pub(super) async fn build_runtime_me_selftest_data(
+    shared: &ApiShared,
+    cfg: &ProxyConfig,
+) -> RuntimeMeSelftestData {
     let now_epoch_secs = now_epoch_secs();
     if shared.me_pool.read().await.is_none() {
         return RuntimeMeSelftestData {
@@ -139,7 +158,26 @@ pub(super) async fn build_runtime_me_selftest_data(shared: &ApiShared) -> Runtim
     let pid = std::process::id();
     let pid_state = if pid == 1 { "one" } else { "non-one" };
 
-    let bnd = bnd_snapshot();
+    let has_socks_upstreams = cfg.upstreams.iter().any(|upstream| {
+        upstream.enabled
+            && matches!(
+                upstream.upstream_type,
+                UpstreamType::Socks4 { .. } | UpstreamType::Socks5 { .. }
+            )
+    });
+
+    let bnd = if has_socks_upstreams {
+        let snapshot = bnd_snapshot();
+        Some(RuntimeMeSelftestBndData {
+            addr_state: snapshot.addr_status,
+            port_state: snapshot.port_status,
+            last_addr: snapshot.last_addr.map(|value| value.to_string()),
+            last_seen_age_secs: snapshot.last_seen_age_secs,
+        })
+    } else {
+        None
+    };
+    let upstreams = build_upstream_selftest_data(shared);
 
     RuntimeMeSelftestData {
         enabled: true,
@@ -168,14 +206,39 @@ pub(super) async fn build_runtime_me_selftest_data(shared: &ApiShared) -> Runtim
                 pid,
                 state: pid_state,
             },
-            bnd: RuntimeMeSelftestBndData {
-                addr_state: bnd.addr_status,
-                port_state: bnd.port_status,
-                last_addr: bnd.last_addr.map(|value| value.to_string()),
-                last_seen_age_secs: bnd.last_seen_age_secs,
-            },
+            bnd,
+            upstreams,
         }),
     }
+}
+
+fn build_upstream_selftest_data(shared: &ApiShared) -> Option<Vec<RuntimeMeSelftestUpstreamData>> {
+    let snapshot = shared.upstream_manager.try_api_snapshot()?;
+    if snapshot.summary.configured_total <= 1 {
+        return None;
+    }
+
+    let mut upstream_bnd_by_id: HashMap<usize, _> = upstream_bnd_snapshots()
+        .into_iter()
+        .map(|entry| (entry.upstream_id, entry))
+        .collect();
+    let mut rows = Vec::with_capacity(snapshot.upstreams.len());
+    for upstream in snapshot.upstreams {
+        let upstream_bnd = upstream_bnd_by_id.remove(&upstream.upstream_id);
+        rows.push(RuntimeMeSelftestUpstreamData {
+            upstream_id: upstream.upstream_id,
+            route_kind: map_route_kind(upstream.route_kind),
+            address: upstream.address,
+            bnd: upstream_bnd.as_ref().map(|entry| RuntimeMeSelftestBndData {
+                addr_state: entry.addr_status,
+                port_state: entry.port_status,
+                last_addr: entry.last_addr.map(|value| value.to_string()),
+                last_seen_age_secs: entry.last_seen_age_secs,
+            }),
+            ip: upstream_bnd.and_then(|entry| entry.last_ip.map(|value| value.to_string())),
+        });
+    }
+    Some(rows)
 }
 
 fn update_kdf_ewma(now_epoch_secs: u64, total_errors: u64) -> f64 {
@@ -214,6 +277,14 @@ fn classify_ip(ip: IpAddr) -> &'static str {
         return "bogon";
     }
     "good"
+}
+
+fn map_route_kind(value: UpstreamRouteKind) -> &'static str {
+    match value {
+        UpstreamRouteKind::Direct => "direct",
+        UpstreamRouteKind::Socks4 => "socks4",
+        UpstreamRouteKind::Socks5 => "socks5",
+    }
 }
 
 fn round3(value: f64) -> f64 {

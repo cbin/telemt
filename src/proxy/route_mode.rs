@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tokio::sync::watch;
 
@@ -43,6 +43,7 @@ pub(crate) struct RouteCutoverState {
 pub(crate) struct RouteRuntimeController {
     mode: Arc<AtomicU8>,
     generation: Arc<AtomicU64>,
+    direct_since_epoch_secs: Arc<AtomicU64>,
     tx: watch::Sender<RouteCutoverState>,
 }
 
@@ -53,9 +54,15 @@ impl RouteRuntimeController {
             generation: 0,
         };
         let (tx, _rx) = watch::channel(initial);
+        let direct_since_epoch_secs = if matches!(initial_mode, RelayRouteMode::Direct) {
+            now_epoch_secs()
+        } else {
+            0
+        };
         Self {
             mode: Arc::new(AtomicU8::new(initial_mode.as_u8())),
             generation: Arc::new(AtomicU64::new(0)),
+            direct_since_epoch_secs: Arc::new(AtomicU64::new(direct_since_epoch_secs)),
             tx,
         }
     }
@@ -71,16 +78,34 @@ impl RouteRuntimeController {
         self.tx.subscribe()
     }
 
+    pub(crate) fn direct_since_epoch_secs(&self) -> Option<u64> {
+        let value = self.direct_since_epoch_secs.load(Ordering::Relaxed);
+        (value > 0).then_some(value)
+    }
+
     pub(crate) fn set_mode(&self, mode: RelayRouteMode) -> Option<RouteCutoverState> {
         let previous = self.mode.swap(mode.as_u8(), Ordering::Relaxed);
         if previous == mode.as_u8() {
             return None;
+        }
+        if matches!(mode, RelayRouteMode::Direct) {
+            self.direct_since_epoch_secs
+                .store(now_epoch_secs(), Ordering::Relaxed);
+        } else {
+            self.direct_since_epoch_secs.store(0, Ordering::Relaxed);
         }
         let generation = self.generation.fetch_add(1, Ordering::Relaxed) + 1;
         let next = RouteCutoverState { mode, generation };
         self.tx.send_replace(next);
         Some(next)
     }
+}
+
+fn now_epoch_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_secs())
+        .unwrap_or(0)
 }
 
 pub(crate) fn is_session_affected_by_cutover(

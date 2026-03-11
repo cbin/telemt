@@ -1,5 +1,5 @@
-use std::collections::VecDeque;
-use std::net::SocketAddr;
+use std::collections::{HashMap, VecDeque};
+use std::net::{IpAddr, SocketAddr};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -45,6 +45,16 @@ pub(crate) struct MeBndSnapshot {
     pub last_seen_age_secs: Option<u64>,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct MeUpstreamBndSnapshot {
+    pub upstream_id: usize,
+    pub addr_status: &'static str,
+    pub port_status: &'static str,
+    pub last_addr: Option<SocketAddr>,
+    pub last_ip: Option<IpAddr>,
+    pub last_seen_age_secs: Option<u64>,
+}
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct MeTimeskewSnapshot {
     pub max_skew_secs_15m: Option<u64>,
@@ -67,7 +77,17 @@ struct MeSelftestState {
     bnd_port_status: BndPortStatus,
     bnd_last_addr: Option<SocketAddr>,
     bnd_last_seen_epoch_secs: Option<u64>,
+    upstream_bnd: HashMap<usize, UpstreamBndState>,
     timeskew_samples: VecDeque<MeTimeskewSample>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct UpstreamBndState {
+    addr_status: BndAddrStatus,
+    port_status: BndPortStatus,
+    last_addr: Option<SocketAddr>,
+    last_ip: Option<IpAddr>,
+    last_seen_epoch_secs: Option<u64>,
 }
 
 impl Default for MeSelftestState {
@@ -77,6 +97,7 @@ impl Default for MeSelftestState {
             bnd_port_status: BndPortStatus::Error,
             bnd_last_addr: None,
             bnd_last_seen_epoch_secs: None,
+            upstream_bnd: HashMap::new(),
             timeskew_samples: VecDeque::new(),
         }
     }
@@ -124,6 +145,51 @@ pub(crate) fn bnd_snapshot() -> MeBndSnapshot {
             .bnd_last_seen_epoch_secs
             .map(|value| now_epoch_secs.saturating_sub(value)),
     }
+}
+
+pub(crate) fn record_upstream_bnd_status(
+    upstream_id: usize,
+    addr_status: BndAddrStatus,
+    port_status: BndPortStatus,
+    last_addr: Option<SocketAddr>,
+    last_ip: Option<IpAddr>,
+) {
+    let now_epoch_secs = now_epoch_secs();
+    let Ok(mut guard) = state().lock() else {
+        return;
+    };
+    guard.upstream_bnd.insert(
+        upstream_id,
+        UpstreamBndState {
+            addr_status,
+            port_status,
+            last_addr,
+            last_ip,
+            last_seen_epoch_secs: Some(now_epoch_secs),
+        },
+    );
+}
+
+pub(crate) fn upstream_bnd_snapshots() -> Vec<MeUpstreamBndSnapshot> {
+    let now_epoch_secs = now_epoch_secs();
+    let Ok(guard) = state().lock() else {
+        return Vec::new();
+    };
+    let mut out = Vec::with_capacity(guard.upstream_bnd.len());
+    for (upstream_id, entry) in &guard.upstream_bnd {
+        out.push(MeUpstreamBndSnapshot {
+            upstream_id: *upstream_id,
+            addr_status: entry.addr_status.as_str(),
+            port_status: entry.port_status.as_str(),
+            last_addr: entry.last_addr,
+            last_ip: entry.last_ip,
+            last_seen_age_secs: entry
+                .last_seen_epoch_secs
+                .map(|value| now_epoch_secs.saturating_sub(value)),
+        });
+    }
+    out.sort_by_key(|entry| entry.upstream_id);
+    out
 }
 
 pub(crate) fn record_timeskew_sample(source: &'static str, skew_secs: u64) {

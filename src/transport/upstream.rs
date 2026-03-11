@@ -213,6 +213,7 @@ pub struct UpstreamApiPolicySnapshot {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UpstreamEgressInfo {
+    pub upstream_id: usize,
     pub route_kind: UpstreamRouteKind,
     pub local_addr: Option<SocketAddr>,
     pub direct_bind_ip: Option<IpAddr>,
@@ -672,7 +673,7 @@ impl UpstreamManager {
             self.stats.increment_upstream_connect_attempt_total();
             let start = Instant::now();
             match self
-                .connect_via_upstream(&upstream, target, bind_rr.clone(), attempt_timeout)
+                .connect_via_upstream(idx, &upstream, target, bind_rr.clone(), attempt_timeout)
                 .await
             {
                 Ok((stream, egress)) => {
@@ -779,6 +780,7 @@ impl UpstreamManager {
 
     async fn connect_via_upstream(
         &self,
+        upstream_id: usize,
         config: &UpstreamConfig,
         target: SocketAddr,
         bind_rr: Option<Arc<AtomicUsize>>,
@@ -828,6 +830,7 @@ impl UpstreamManager {
                 Ok((
                     stream,
                     UpstreamEgressInfo {
+                        upstream_id,
                         route_kind: UpstreamRouteKind::Direct,
                         local_addr,
                         direct_bind_ip: bind_ip,
@@ -906,6 +909,7 @@ impl UpstreamManager {
                 Ok((
                     stream,
                     UpstreamEgressInfo {
+                        upstream_id,
                         route_kind: UpstreamRouteKind::Socks4,
                         local_addr,
                         direct_bind_ip: None,
@@ -986,6 +990,7 @@ impl UpstreamManager {
                 Ok((
                     stream,
                     UpstreamEgressInfo {
+                        upstream_id,
                         route_kind: UpstreamRouteKind::Socks5,
                         local_addr,
                         direct_bind_ip: None,
@@ -1048,7 +1053,7 @@ impl UpstreamManager {
 
                     let result = tokio::time::timeout(
                         Duration::from_secs(DC_PING_TIMEOUT_SECS),
-                        self.ping_single_dc(upstream_config, Some(bind_rr.clone()), addr_v6)
+                        self.ping_single_dc(*upstream_idx, upstream_config, Some(bind_rr.clone()), addr_v6)
                     ).await;
 
                     let ping_result = match result {
@@ -1099,7 +1104,7 @@ impl UpstreamManager {
 
                     let result = tokio::time::timeout(
                         Duration::from_secs(DC_PING_TIMEOUT_SECS),
-                        self.ping_single_dc(upstream_config, Some(bind_rr.clone()), addr_v4)
+                        self.ping_single_dc(*upstream_idx, upstream_config, Some(bind_rr.clone()), addr_v4)
                     ).await;
 
                     let ping_result = match result {
@@ -1162,7 +1167,7 @@ impl UpstreamManager {
                             }
                             let result = tokio::time::timeout(
                                 Duration::from_secs(DC_PING_TIMEOUT_SECS),
-                                self.ping_single_dc(upstream_config, Some(bind_rr.clone()), addr)
+                                self.ping_single_dc(*upstream_idx, upstream_config, Some(bind_rr.clone()), addr)
                             ).await;
 
                             let ping_result = match result {
@@ -1233,6 +1238,7 @@ impl UpstreamManager {
 
     async fn ping_single_dc(
         &self,
+        upstream_id: usize,
         config: &UpstreamConfig,
         bind_rr: Option<Arc<AtomicUsize>>,
         target: SocketAddr,
@@ -1240,6 +1246,7 @@ impl UpstreamManager {
         let start = Instant::now();
         let _ = self
             .connect_via_upstream(
+                upstream_id,
                 config,
                 target,
                 bind_rr,
@@ -1418,6 +1425,7 @@ impl UpstreamManager {
                             let result = tokio::time::timeout(
                                 Duration::from_secs(HEALTH_CHECK_CONNECT_TIMEOUT_SECS),
                                 self.connect_via_upstream(
+                                    i,
                                     &config,
                                     endpoint,
                                     Some(bind_rr.clone()),

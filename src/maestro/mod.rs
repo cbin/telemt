@@ -220,6 +220,7 @@ pub async fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
             let ip_tracker_api = ip_tracker.clone();
             let me_pool_api = api_me_pool.clone();
             let upstream_manager_api = upstream_manager.clone();
+            let route_runtime_api = route_runtime.clone();
             let config_rx_api = api_config_rx.clone();
             let admission_rx_api = admission_rx.clone();
             let config_path_api = std::path::PathBuf::from(&config_path);
@@ -231,6 +232,7 @@ pub async fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
                     stats_api,
                     ip_tracker_api,
                     me_pool_api,
+                    route_runtime_api,
                     upstream_manager_api,
                     config_rx_api,
                     admission_rx_api,

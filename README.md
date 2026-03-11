@@ -264,6 +264,11 @@ git clone https://github.com/telemt/telemt
 cd telemt
 # Starting Release Build
 cargo build --release
+
+# Low-RAM devices (1 GB, e.g. NanoPi Neo3 / Raspberry Pi Zero 2):
+# release profile uses lto = "thin" to reduce peak linker memory.
+# If your custom toolchain overrides profiles, avoid enabling fat LTO.
+
 # Move to /bin
 mv ./target/release/telemt /bin
 # Make executable
@@ -271,6 +276,12 @@ chmod +x /bin/telemt
 # Lets go!
 telemt config.toml
 ```
+
+### OpenBSD
+- Build and service setup guide: [OpenBSD Guide (EN)](docs/OPENBSD.en.md)
+- Example rc.d script: [contrib/openbsd/telemt.rcd](contrib/openbsd/telemt.rcd)
+- Status: OpenBSD sandbox hardening with `pledge(2)` and `unveil(2)` is not implemented yet.
+
 
 ## Why Rust?
 - Long-running reliability and idempotent behavior

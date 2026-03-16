@@ -19,6 +19,8 @@ use crate::stats::ReplayChecker;
 use crate::config::ProxyConfig;
 use crate::tls_front::{TlsFrontCache, emulator};
 
+const ACCESS_SECRET_BYTES: usize = 16;
+
 fn decode_user_secrets(
     config: &ProxyConfig,
     preferred_user: Option<&str>,
@@ -28,6 +30,7 @@ fn decode_user_secrets(
     if let Some(preferred) = preferred_user
         && let Some(secret_hex) = config.access.users.get(preferred)
         && let Ok(bytes) = hex::decode(secret_hex)
+        && bytes.len() == ACCESS_SECRET_BYTES
     {
         secrets.push((preferred.to_string(), bytes));
     }
@@ -36,7 +39,9 @@ fn decode_user_secrets(
         if preferred_user.is_some_and(|preferred| preferred == name.as_str()) {
             continue;
         }
-        if let Ok(bytes) = hex::decode(secret_hex) {
+        if let Ok(bytes) = hex::decode(secret_hex)
+            && bytes.len() == ACCESS_SECRET_BYTES
+        {
             secrets.push((name.clone(), bytes));
         }
     }
@@ -48,7 +53,7 @@ fn decode_user_secrets(
 ///
 /// Key material (`dec_key`, `dec_iv`, `enc_key`, `enc_iv`) is
 /// zeroized on drop.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct HandshakeSuccess {
     /// Authenticated user name
     pub user: String,
@@ -99,14 +104,6 @@ where
         return HandshakeResult::BadClient { reader, writer };
     }
 
-    let digest = &handshake[tls::TLS_DIGEST_POS..tls::TLS_DIGEST_POS + tls::TLS_DIGEST_LEN];
-    let digest_half = &digest[..tls::TLS_DIGEST_HALF_LEN];
-
-    if replay_checker.check_and_add_tls_digest(digest_half) {
-        warn!(peer = %peer, "TLS replay attack detected (duplicate digest)");
-        return HandshakeResult::BadClient { reader, writer };
-    }
-
     let secrets = decode_user_secrets(config, None);
 
     let validation = match tls::validate_tls_handshake(
@@ -124,6 +121,14 @@ where
             return HandshakeResult::BadClient { reader, writer };
         }
     };
+
+    // Replay tracking is applied only after successful authentication to avoid
+    // letting unauthenticated probes evict valid entries from the replay cache.
+    let digest_half = &validation.digest[..tls::TLS_DIGEST_HALF_LEN];
+    if replay_checker.check_and_add_tls_digest(digest_half) {
+        warn!(peer = %peer, "TLS replay attack detected (duplicate digest)");
+        return HandshakeResult::BadClient { reader, writer };
+    }
 
     let secret = match secrets.iter().find(|(name, _)| *name == validation.user) {
         Some((_, s)) => s,
@@ -254,11 +259,6 @@ where
 
     let dec_prekey_iv = &handshake[SKIP_LEN..SKIP_LEN + PREKEY_LEN + IV_LEN];
 
-    if replay_checker.check_and_add_handshake(dec_prekey_iv) {
-        warn!(peer = %peer, "MTProto replay attack detected");
-        return HandshakeResult::BadClient { reader, writer };
-    }
-
     let enc_prekey_iv: Vec<u8> = dec_prekey_iv.iter().rev().copied().collect();
 
     let decoded_users = decode_user_secrets(config, preferred_user);
@@ -273,14 +273,19 @@ where
         dec_key_input.extend_from_slice(&secret);
         let dec_key = sha256(&dec_key_input);
 
-        let dec_iv = u128::from_be_bytes(dec_iv_bytes.try_into().unwrap());
+        let mut dec_iv_arr = [0u8; IV_LEN];
+        dec_iv_arr.copy_from_slice(dec_iv_bytes);
+        let dec_iv = u128::from_be_bytes(dec_iv_arr);
 
         let mut decryptor = AesCtr::new(&dec_key, dec_iv);
         let decrypted = decryptor.decrypt(handshake);
 
-        let tag_bytes: [u8; 4] = decrypted[PROTO_TAG_POS..PROTO_TAG_POS + 4]
-            .try_into()
-            .unwrap();
+        let tag_bytes: [u8; 4] = [
+            decrypted[PROTO_TAG_POS],
+            decrypted[PROTO_TAG_POS + 1],
+            decrypted[PROTO_TAG_POS + 2],
+            decrypted[PROTO_TAG_POS + 3],
+        ];
 
         let proto_tag = match ProtoTag::from_bytes(tag_bytes) {
             Some(tag) => tag,
@@ -303,9 +308,7 @@ where
             continue;
         }
 
-        let dc_idx = i16::from_le_bytes(
-            decrypted[DC_IDX_POS..DC_IDX_POS + 2].try_into().unwrap()
-        );
+        let dc_idx = i16::from_le_bytes([decrypted[DC_IDX_POS], decrypted[DC_IDX_POS + 1]]);
 
         let enc_prekey = &enc_prekey_iv[..PREKEY_LEN];
         let enc_iv_bytes = &enc_prekey_iv[PREKEY_LEN..];
@@ -315,9 +318,18 @@ where
         enc_key_input.extend_from_slice(&secret);
         let enc_key = sha256(&enc_key_input);
 
-        let enc_iv = u128::from_be_bytes(enc_iv_bytes.try_into().unwrap());
+        let mut enc_iv_arr = [0u8; IV_LEN];
+        enc_iv_arr.copy_from_slice(enc_iv_bytes);
+        let enc_iv = u128::from_be_bytes(enc_iv_arr);
 
         let encryptor = AesCtr::new(&enc_key, enc_iv);
+
+        // Apply replay tracking only after successful authentication to prevent
+        // unauthenticated probes from evicting legitimate replay-cache entries.
+        if replay_checker.check_and_add_handshake(dec_prekey_iv) {
+            warn!(peer = %peer, user = %user, "MTProto replay attack detected");
+            return HandshakeResult::BadClient { reader, writer };
+        }
 
         let success = HandshakeSuccess {
             user: user.clone(),
@@ -365,14 +377,16 @@ pub fn generate_tg_nonce(
 ) -> ([u8; HANDSHAKE_LEN], [u8; 32], u128, [u8; 32], u128) {
     loop {
         let bytes = rng.bytes(HANDSHAKE_LEN);
-        let mut nonce: [u8; HANDSHAKE_LEN] = bytes.try_into().unwrap();
+        let Ok(mut nonce): Result<[u8; HANDSHAKE_LEN], _> = bytes.try_into() else {
+            continue;
+        };
 
         if RESERVED_NONCE_FIRST_BYTES.contains(&nonce[0]) { continue; }
 
-        let first_four: [u8; 4] = nonce[..4].try_into().unwrap();
+        let first_four: [u8; 4] = [nonce[0], nonce[1], nonce[2], nonce[3]];
         if RESERVED_NONCE_BEGINNINGS.contains(&first_four) { continue; }
 
-        let continue_four: [u8; 4] = nonce[4..8].try_into().unwrap();
+        let continue_four: [u8; 4] = [nonce[4], nonce[5], nonce[6], nonce[7]];
         if RESERVED_NONCE_CONTINUES.contains(&continue_four) { continue; }
 
         nonce[PROTO_TAG_POS..PROTO_TAG_POS + 4].copy_from_slice(&proto_tag.to_bytes());
@@ -390,11 +404,17 @@ pub fn generate_tg_nonce(
         let enc_key_iv = &nonce[SKIP_LEN..SKIP_LEN + KEY_LEN + IV_LEN];
         let dec_key_iv: Vec<u8> = enc_key_iv.iter().rev().copied().collect();
 
-        let tg_enc_key: [u8; 32] = enc_key_iv[..KEY_LEN].try_into().unwrap();
-        let tg_enc_iv = u128::from_be_bytes(enc_key_iv[KEY_LEN..].try_into().unwrap());
+        let mut tg_enc_key = [0u8; 32];
+        tg_enc_key.copy_from_slice(&enc_key_iv[..KEY_LEN]);
+        let mut tg_enc_iv_arr = [0u8; IV_LEN];
+        tg_enc_iv_arr.copy_from_slice(&enc_key_iv[KEY_LEN..]);
+        let tg_enc_iv = u128::from_be_bytes(tg_enc_iv_arr);
 
-        let tg_dec_key: [u8; 32] = dec_key_iv[..KEY_LEN].try_into().unwrap();
-        let tg_dec_iv = u128::from_be_bytes(dec_key_iv[KEY_LEN..].try_into().unwrap());
+        let mut tg_dec_key = [0u8; 32];
+        tg_dec_key.copy_from_slice(&dec_key_iv[..KEY_LEN]);
+        let mut tg_dec_iv_arr = [0u8; IV_LEN];
+        tg_dec_iv_arr.copy_from_slice(&dec_key_iv[KEY_LEN..]);
+        let tg_dec_iv = u128::from_be_bytes(tg_dec_iv_arr);
 
         return (nonce, tg_enc_key, tg_enc_iv, tg_dec_key, tg_dec_iv);
     }
@@ -405,11 +425,17 @@ pub fn encrypt_tg_nonce_with_ciphers(nonce: &[u8; HANDSHAKE_LEN]) -> (Vec<u8>, A
     let enc_key_iv = &nonce[SKIP_LEN..SKIP_LEN + KEY_LEN + IV_LEN];
     let dec_key_iv: Vec<u8> = enc_key_iv.iter().rev().copied().collect();
 
-    let enc_key: [u8; 32] = enc_key_iv[..KEY_LEN].try_into().unwrap();
-    let enc_iv = u128::from_be_bytes(enc_key_iv[KEY_LEN..].try_into().unwrap());
+    let mut enc_key = [0u8; 32];
+    enc_key.copy_from_slice(&enc_key_iv[..KEY_LEN]);
+    let mut enc_iv_arr = [0u8; IV_LEN];
+    enc_iv_arr.copy_from_slice(&enc_key_iv[KEY_LEN..]);
+    let enc_iv = u128::from_be_bytes(enc_iv_arr);
 
-    let dec_key: [u8; 32] = dec_key_iv[..KEY_LEN].try_into().unwrap();
-    let dec_iv = u128::from_be_bytes(dec_key_iv[KEY_LEN..].try_into().unwrap());
+    let mut dec_key = [0u8; 32];
+    dec_key.copy_from_slice(&dec_key_iv[..KEY_LEN]);
+    let mut dec_iv_arr = [0u8; IV_LEN];
+    dec_iv_arr.copy_from_slice(&dec_key_iv[KEY_LEN..]);
+    let dec_iv = u128::from_be_bytes(dec_iv_arr);
 
     let mut encryptor = AesCtr::new(&enc_key, enc_iv);
     let encrypted_full = encryptor.encrypt(nonce);  // counter: 0 → 4
@@ -429,80 +455,15 @@ pub fn encrypt_tg_nonce(nonce: &[u8; HANDSHAKE_LEN]) -> Vec<u8> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+#[path = "handshake_security_tests.rs"]
+mod security_tests;
 
-    #[test]
-    fn test_generate_tg_nonce() {
-        let client_dec_key = [0x42u8; 32];
-        let client_dec_iv = 12345u128;
-        let client_enc_key = [0x24u8; 32];
-        let client_enc_iv = 54321u128;
+/// Compile-time guard: HandshakeSuccess holds cryptographic key material and
+/// must never be Copy.  A Copy impl would allow silent key duplication,
+/// undermining the zeroize-on-drop guarantee.
+mod compile_time_security_checks {
+    use super::HandshakeSuccess;
+    use static_assertions::assert_not_impl_all;
 
-        let rng = SecureRandom::new();
-        let (nonce, _tg_enc_key, _tg_enc_iv, _tg_dec_key, _tg_dec_iv) = 
-            generate_tg_nonce(
-                ProtoTag::Secure,
-                2,
-                &client_dec_key,
-                client_dec_iv,
-                &client_enc_key,
-                client_enc_iv,
-                &rng,
-                false,
-            );
-
-        assert_eq!(nonce.len(), HANDSHAKE_LEN);
-
-        let tag_bytes: [u8; 4] = nonce[PROTO_TAG_POS..PROTO_TAG_POS + 4].try_into().unwrap();
-        assert_eq!(ProtoTag::from_bytes(tag_bytes), Some(ProtoTag::Secure));
-    }
-
-    #[test]
-    fn test_encrypt_tg_nonce() {
-        let client_dec_key = [0x42u8; 32];
-        let client_dec_iv = 12345u128;
-        let client_enc_key = [0x24u8; 32];
-        let client_enc_iv = 54321u128;
-
-        let rng = SecureRandom::new();
-        let (nonce, _, _, _, _) = 
-            generate_tg_nonce(
-                ProtoTag::Secure,
-                2,
-                &client_dec_key,
-                client_dec_iv,
-                &client_enc_key,
-                client_enc_iv,
-                &rng,
-                false,
-            );
-
-        let encrypted = encrypt_tg_nonce(&nonce);
-
-        assert_eq!(encrypted.len(), HANDSHAKE_LEN);
-        assert_eq!(&encrypted[..PROTO_TAG_POS], &nonce[..PROTO_TAG_POS]);
-        assert_ne!(&encrypted[PROTO_TAG_POS..], &nonce[PROTO_TAG_POS..]);
-    }
-
-    #[test]
-    fn test_handshake_success_zeroize_on_drop() {
-        let success = HandshakeSuccess {
-            user: "test".to_string(),
-            dc_idx: 2,
-            proto_tag: ProtoTag::Secure,
-            dec_key: [0xAA; 32],
-            dec_iv: 0xBBBBBBBB,
-            enc_key: [0xCC; 32],
-            enc_iv: 0xDDDDDDDD,
-            peer: "127.0.0.1:1234".parse().unwrap(),
-            is_tls: true,
-        };
-
-        assert_eq!(success.dec_key, [0xAA; 32]);
-        assert_eq!(success.enc_key, [0xCC; 32]);
-
-        drop(success);
-        // Drop impl zeroizes key material without panic
-    }
+    assert_not_impl_all!(HandshakeSuccess: Copy, Clone);
 }

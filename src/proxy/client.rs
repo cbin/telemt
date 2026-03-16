@@ -23,7 +23,7 @@ enum HandshakeOutcome {
 
 use crate::config::ProxyConfig;
 use crate::crypto::SecureRandom;
-use crate::error::{HandshakeResult, ProxyError, Result};
+use crate::error::{HandshakeResult, ProxyError, Result, StreamError};
 use crate::ip_tracker::UserIpTracker;
 use crate::protocol::constants::*;
 use crate::protocol::tls;
@@ -63,10 +63,12 @@ fn record_handshake_failure_class(
     peer_ip: IpAddr,
     error: &ProxyError,
 ) {
-    let class = if error.to_string().contains("expected 64 bytes, got 0") {
-        "expected_64_got_0"
-    } else {
-        "other"
+    let class = match error {
+        ProxyError::Io(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => {
+            "expected_64_got_0"
+        }
+        ProxyError::Stream(StreamError::UnexpectedEof) => "expected_64_got_0",
+        _ => "other",
     };
     record_beobachten_class(beobachten, config, peer_ip, class);
 }
@@ -204,9 +206,19 @@ where
                 &config, &replay_checker, true, Some(tls_user.as_str()),
             ).await {
                 HandshakeResult::Success(result) => result,
-                HandshakeResult::BadClient { reader: _, writer: _ } => {
+                HandshakeResult::BadClient { reader, writer } => {
                     stats.increment_connects_bad();
                     debug!(peer = %peer, "Valid TLS but invalid MTProto handshake");
+                    handle_bad_client(
+                        reader,
+                        writer,
+                        &mtproto_handshake,
+                        real_peer,
+                        local_addr,
+                        &config,
+                        &beobachten,
+                    )
+                    .await;
                     return Ok(HandshakeOutcome::Handled);
                 }
                 HandshakeResult::Error(e) => return Err(e),
@@ -590,12 +602,19 @@ impl RunningClientHandler {
         .await
         {
             HandshakeResult::Success(result) => result,
-            HandshakeResult::BadClient {
-                reader: _,
-                writer: _,
-            } => {
+            HandshakeResult::BadClient { reader, writer } => {
                 stats.increment_connects_bad();
                 debug!(peer = %peer, "Valid TLS but invalid MTProto handshake");
+                handle_bad_client(
+                    reader,
+                    writer,
+                    &mtproto_handshake,
+                    peer,
+                    local_addr,
+                    &config,
+                    &self.beobachten,
+                )
+                .await;
                 return Ok(HandshakeOutcome::Handled);
             }
             HandshakeResult::Error(e) => return Err(e),
@@ -806,8 +825,24 @@ impl RunningClientHandler {
             });
         }
 
-        let ip_reserved = match ip_tracker.check_and_add(user, peer_addr.ip()).await {
-            Ok(()) => true,
+        if let Some(limit) = config.access.user_max_tcp_conns.get(user)
+            && stats.get_user_curr_connects(user) >= *limit as u64
+        {
+            return Err(ProxyError::ConnectionLimitExceeded {
+                user: user.to_string(),
+            });
+        }
+
+        if let Some(quota) = config.access.user_data_quota.get(user)
+            && stats.get_user_total_octets(user) >= *quota
+        {
+            return Err(ProxyError::DataQuotaExceeded {
+                user: user.to_string(),
+            });
+        }
+
+        match ip_tracker.check_and_add(user, peer_addr.ip()).await {
+            Ok(()) => {}
             Err(reason) => {
                 warn!(
                     user = %user,
@@ -819,33 +854,12 @@ impl RunningClientHandler {
                     user: user.to_string(),
                 });
             }
-        };
-        // IP limit check
-
-        if let Some(limit) = config.access.user_max_tcp_conns.get(user)
-            && stats.get_user_curr_connects(user) >= *limit as u64
-        {
-            if ip_reserved {
-                ip_tracker.remove_ip(user, peer_addr.ip()).await;
-                stats.increment_ip_reservation_rollback_tcp_limit_total();
-            }
-            return Err(ProxyError::ConnectionLimitExceeded {
-                user: user.to_string(),
-            });
-        }
-
-        if let Some(quota) = config.access.user_data_quota.get(user)
-            && stats.get_user_total_octets(user) >= *quota
-        {
-            if ip_reserved {
-                ip_tracker.remove_ip(user, peer_addr.ip()).await;
-                stats.increment_ip_reservation_rollback_quota_limit_total();
-            }
-            return Err(ProxyError::DataQuotaExceeded {
-                user: user.to_string(),
-            });
         }
 
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "client_security_tests.rs"]
+mod security_tests;

@@ -50,6 +50,8 @@ This document lists all configuration keys accepted by `config.toml`.
 | me_d2c_flush_batch_max_bytes | `usize` | `131072` | `4096..=2_097_152`. | Max ME->client payload bytes coalesced before flush. |
 | me_d2c_flush_batch_max_delay_us | `u64` | `500` | `0..=5000`. | Max microsecond wait for coalescing more ME->client frames (`0` disables timed coalescing). |
 | me_d2c_ack_flush_immediate | `bool` | `true` | — | Flushes client writer immediately after quick-ack write. |
+| me_quota_soft_overshoot_bytes | `u64` | `65536` | `0..=16_777_216`. | Extra per-route quota allowance (bytes) tolerated before writer-side quota enforcement drops route data. |
+| me_d2c_frame_buf_shrink_threshold_bytes | `usize` | `262144` | `4096..=16_777_216`. | Threshold for shrinking oversized ME->client frame-aggregation buffers after flush. |
 | direct_relay_copy_buf_c2s_bytes | `usize` | `65536` | `4096..=1_048_576`. | Copy buffer size for client->DC direction in direct relay. |
 | direct_relay_copy_buf_s2c_bytes | `usize` | `262144` | `8192..=2_097_152`. | Copy buffer size for DC->client direction in direct relay. |
 | crypto_pending_buffer | `usize` | `262144` | — | Max pending ciphertext buffer per client writer (bytes). |
@@ -243,6 +245,10 @@ Note: When `server.proxy_protocol` is enabled, incoming PROXY protocol headers a
 | Parameter | Type | Default | Constraints / validation | Description |
 |---|---|---|---|---|
 | client_handshake | `u64` | `30` | — | Client handshake timeout. |
+| relay_idle_policy_v2_enabled | `bool` | `true` | — | Enables soft/hard middle-relay client idle policy. |
+| relay_client_idle_soft_secs | `u64` | `120` | Must be `> 0`; must be `<= relay_client_idle_hard_secs`. | Soft idle threshold for middle-relay client uplink inactivity (seconds). |
+| relay_client_idle_hard_secs | `u64` | `360` | Must be `> 0`; must be `>= relay_client_idle_soft_secs`. | Hard idle threshold for middle-relay client uplink inactivity (seconds). |
+| relay_idle_grace_after_downstream_activity_secs | `u64` | `30` | Must be `<= relay_client_idle_hard_secs`. | Extra hard-idle grace after recent downstream activity (seconds). |
 | tg_connect | `u64` | `10` | — | Upstream Telegram connect timeout. |
 | client_keepalive | `u64` | `15` | — | Client keepalive timeout. |
 | client_ack | `u64` | `90` | — | Client ACK timeout. |
@@ -255,6 +261,9 @@ Note: When `server.proxy_protocol` is enabled, incoming PROXY protocol headers a
 |---|---|---|---|---|
 | tls_domain | `String` | `"petrovich.ru"` | — | Primary TLS domain used in fake TLS handshake profile. |
 | tls_domains | `String[]` | `[]` | — | Additional TLS domains for generating multiple links. |
+| unknown_sni_action | `"drop" \| "mask"` | `"drop"` | — | Action for TLS ClientHello with unknown/non-configured SNI. |
+| tls_fetch_scope | `String` | `""` | Value is trimmed during load; empty keeps default upstream routing behavior. | Upstream scope tag used for TLS-front metadata fetches. |
+| tls_fetch | `Table` | built-in defaults | See `[censorship.tls_fetch]` section below. | TLS-front metadata fetch strategy settings. |
 | mask | `bool` | `true` | — | Enables masking/fronting relay mode. |
 | mask_host | `String \| null` | `null` | — | Upstream mask host for TLS fronting relay. |
 | mask_port | `u16` | `443` | — | Upstream mask port for TLS fronting relay. |
@@ -279,6 +288,18 @@ Note: When `server.proxy_protocol` is enabled, incoming PROXY protocol headers a
 | mask_timing_normalization_enabled | `bool` | `false` | Requires `mask_timing_normalization_floor_ms > 0`; requires `ceiling >= floor`. | Enables timing envelope normalization on masking outcomes. |
 | mask_timing_normalization_floor_ms | `u64` | `0` | Must be `> 0` when timing normalization is enabled; must be `<= ceiling`. | Lower bound (ms) for masking outcome normalization target. |
 | mask_timing_normalization_ceiling_ms | `u64` | `0` | Must be `>= floor`; must be `<= 60000`. | Upper bound (ms) for masking outcome normalization target. |
+
+## [censorship.tls_fetch]
+
+| Parameter | Type | Default | Constraints / validation | Description |
+|---|---|---|---|---|
+| profiles | `("modern_chrome_like" \| "modern_firefox_like" \| "compat_tls12" \| "legacy_minimal")[]` | `["modern_chrome_like", "modern_firefox_like", "compat_tls12", "legacy_minimal"]` | Empty list falls back to defaults; values are deduplicated preserving order. | Ordered ClientHello profile fallback chain for TLS-front metadata fetch. |
+| strict_route | `bool` | `true` | — | Fails closed on upstream-route connect errors instead of falling back to direct TCP when route is configured. |
+| attempt_timeout_ms | `u64` | `5000` | Must be `> 0`. | Timeout budget per one TLS-fetch profile attempt (ms). |
+| total_budget_ms | `u64` | `15000` | Must be `> 0`. | Total wall-clock budget across all TLS-fetch attempts (ms). |
+| grease_enabled | `bool` | `false` | — | Enables GREASE-style random values in selected ClientHello extensions for fetch traffic. |
+| deterministic | `bool` | `false` | — | Enables deterministic ClientHello randomness for debugging/tests. |
+| profile_cache_ttl_secs | `u64` | `600` | `0` disables cache. | TTL for winner-profile cache entries used by TLS fetch path. |
 
 ### Shape-channel hardening notes (`[censorship]`)
 

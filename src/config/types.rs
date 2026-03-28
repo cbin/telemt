@@ -663,6 +663,10 @@ pub struct GeneralConfig {
     #[serde(default = "default_upstream_connect_budget_ms")]
     pub upstream_connect_budget_ms: u64,
 
+    /// Per-attempt TCP connect timeout to Telegram DC (seconds).
+    #[serde(default = "default_connect_timeout")]
+    pub tg_connect: u64,
+
     /// Consecutive failed requests before upstream is marked unhealthy.
     #[serde(default = "default_upstream_unhealthy_fail_threshold")]
     pub upstream_unhealthy_fail_threshold: u32,
@@ -1007,6 +1011,7 @@ impl Default for GeneralConfig {
             upstream_connect_retry_attempts: default_upstream_connect_retry_attempts(),
             upstream_connect_retry_backoff_ms: default_upstream_connect_retry_backoff_ms(),
             upstream_connect_budget_ms: default_upstream_connect_budget_ms(),
+            tg_connect: default_connect_timeout(),
             upstream_unhealthy_fail_threshold: default_upstream_unhealthy_fail_threshold(),
             upstream_connect_failfast_hard_errors: default_upstream_connect_failfast_hard_errors(),
             stun_iface_mismatch_ignore: false,
@@ -1335,9 +1340,6 @@ pub struct TimeoutsConfig {
     #[serde(default = "default_relay_idle_grace_after_downstream_activity_secs")]
     pub relay_idle_grace_after_downstream_activity_secs: u64,
 
-    #[serde(default = "default_connect_timeout")]
-    pub tg_connect: u64,
-
     #[serde(default = "default_keepalive")]
     pub client_keepalive: u64,
 
@@ -1362,7 +1364,6 @@ impl Default for TimeoutsConfig {
             relay_client_idle_hard_secs: default_relay_client_idle_hard_secs(),
             relay_idle_grace_after_downstream_activity_secs:
                 default_relay_idle_grace_after_downstream_activity_secs(),
-            tg_connect: default_connect_timeout(),
             client_keepalive: default_keepalive(),
             client_ack: default_ack_timeout(),
             me_one_retry: default_me_one_retry(),

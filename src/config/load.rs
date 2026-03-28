@@ -346,6 +346,12 @@ impl ProxyConfig {
             ));
         }
 
+        if config.general.tg_connect == 0 {
+            return Err(ProxyError::Config(
+                "general.tg_connect must be > 0".to_string(),
+            ));
+        }
+
         if config.general.upstream_unhealthy_fail_threshold == 0 {
             return Err(ProxyError::Config(
                 "general.upstream_unhealthy_fail_threshold must be > 0".to_string(),
@@ -1904,6 +1910,26 @@ mod tests {
         std::fs::write(&path, toml).unwrap();
         let err = ProxyConfig::load(&path).unwrap_err().to_string();
         assert!(err.contains("general.upstream_unhealthy_fail_threshold must be > 0"));
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn tg_connect_zero_is_rejected() {
+        let toml = r#"
+            [general]
+            tg_connect = 0
+
+            [censorship]
+            tls_domain = "example.com"
+
+            [access.users]
+            user = "00000000000000000000000000000000"
+        "#;
+        let dir = std::env::temp_dir();
+        let path = dir.join("telemt_tg_connect_zero_test.toml");
+        std::fs::write(&path, toml).unwrap();
+        let err = ProxyConfig::load(&path).unwrap_err().to_string();
+        assert!(err.contains("general.tg_connect must be > 0"));
         let _ = std::fs::remove_file(path);
     }
 

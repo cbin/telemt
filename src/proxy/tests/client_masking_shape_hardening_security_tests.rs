@@ -20,6 +20,7 @@ fn new_upstream_manager(stats: Arc<Stats>) -> Arc<UpstreamManager> {
         1,
         1,
         1,
+        10,
         1,
         false,
         stats,

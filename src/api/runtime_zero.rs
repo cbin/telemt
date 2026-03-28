@@ -228,7 +228,7 @@ pub(super) fn build_limits_effective_data(cfg: &ProxyConfig) -> EffectiveLimitsD
         me_pool_force_close_secs: cfg.general.effective_me_pool_force_close_secs(),
         timeouts: EffectiveTimeoutLimits {
             client_handshake_secs: cfg.timeouts.client_handshake,
-            tg_connect_secs: cfg.timeouts.tg_connect,
+            tg_connect_secs: cfg.general.tg_connect,
             client_keepalive_secs: cfg.timeouts.client_keepalive,
             client_ack_secs: cfg.timeouts.client_ack,
             me_one_retry: cfg.timeouts.me_one_retry,

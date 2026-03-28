@@ -34,8 +34,6 @@ const NUM_DCS: usize = 5;
 
 /// Timeout for individual DC ping attempt
 const DC_PING_TIMEOUT_SECS: u64 = 5;
-/// Timeout for direct TG DC TCP connect readiness.
-const DIRECT_CONNECT_TIMEOUT_SECS: u64 = 10;
 /// Interval between upstream health-check cycles.
 const HEALTH_CHECK_INTERVAL_SECS: u64 = 30;
 /// Timeout for a single health-check connect attempt.
@@ -319,6 +317,8 @@ pub struct UpstreamManager {
     connect_retry_attempts: u32,
     connect_retry_backoff: Duration,
     connect_budget: Duration,
+    /// Per-attempt TCP connect timeout to Telegram DC (`[general] tg_connect`, seconds).
+    tg_connect_timeout_secs: u64,
     unhealthy_fail_threshold: u32,
     connect_failfast_hard_errors: bool,
     no_upstreams_warn_epoch_ms: Arc<AtomicU64>,
@@ -332,6 +332,7 @@ impl UpstreamManager {
         connect_retry_attempts: u32,
         connect_retry_backoff_ms: u64,
         connect_budget_ms: u64,
+        tg_connect_timeout_secs: u64,
         unhealthy_fail_threshold: u32,
         connect_failfast_hard_errors: bool,
         stats: Arc<Stats>,
@@ -347,6 +348,7 @@ impl UpstreamManager {
             connect_retry_attempts: connect_retry_attempts.max(1),
             connect_retry_backoff: Duration::from_millis(connect_retry_backoff_ms),
             connect_budget: Duration::from_millis(connect_budget_ms.max(1)),
+            tg_connect_timeout_secs: tg_connect_timeout_secs.max(1),
             unhealthy_fail_threshold: unhealthy_fail_threshold.max(1),
             connect_failfast_hard_errors,
             no_upstreams_warn_epoch_ms: Arc::new(AtomicU64::new(0)),
@@ -798,7 +800,7 @@ impl UpstreamManager {
             }
             let remaining_budget = self.connect_budget.saturating_sub(elapsed);
             let attempt_timeout =
-                Duration::from_secs(DIRECT_CONNECT_TIMEOUT_SECS).min(remaining_budget);
+                Duration::from_secs(self.tg_connect_timeout_secs).min(remaining_budget);
             if attempt_timeout.is_zero() {
                 last_error = Some(ProxyError::ConnectionTimeout {
                     addr: target.to_string(),
@@ -1901,6 +1903,7 @@ mod tests {
             1,
             100,
             1000,
+            10,
             1,
             false,
             Arc::new(Stats::new()),

@@ -50,6 +50,7 @@ fn build_harness(secret_hex: &str, mask_port: u16) -> PipelineHarness {
         1,
         1,
         1,
+        10,
         1,
         false,
         stats.clone(),

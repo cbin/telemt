@@ -91,6 +91,7 @@ This document lists all configuration keys accepted by `config.toml`.
 | upstream_connect_retry_attempts | `u32` | `2` | Must be `> 0`. | Connect attempts for selected upstream before error/fallback. |
 | upstream_connect_retry_backoff_ms | `u64` | `100` | — | Delay between upstream connect attempts (ms). |
 | upstream_connect_budget_ms | `u64` | `3000` | Must be `> 0`. | Total wall-clock budget for one upstream connect request (ms). |
+| tg_connect | `u64` | `10` | Must be `> 0`. | Per-attempt upstream TCP connect timeout to Telegram DC (seconds). |
 | upstream_unhealthy_fail_threshold | `u32` | `5` | Must be `> 0`. | Consecutive failed requests before upstream is marked unhealthy. |
 | upstream_connect_failfast_hard_errors | `bool` | `false` | — | Skips additional retries for hard non-transient connect errors. |
 | stun_iface_mismatch_ignore | `bool` | `false` | none | Reserved compatibility flag in current runtime revision. |
@@ -249,7 +250,6 @@ Note: When `server.proxy_protocol` is enabled, incoming PROXY protocol headers a
 | relay_client_idle_soft_secs | `u64` | `120` | Must be `> 0`; must be `<= relay_client_idle_hard_secs`. | Soft idle threshold for middle-relay client uplink inactivity (seconds). |
 | relay_client_idle_hard_secs | `u64` | `360` | Must be `> 0`; must be `>= relay_client_idle_soft_secs`. | Hard idle threshold for middle-relay client uplink inactivity (seconds). |
 | relay_idle_grace_after_downstream_activity_secs | `u64` | `30` | Must be `<= relay_client_idle_hard_secs`. | Extra hard-idle grace after recent downstream activity (seconds). |
-| tg_connect | `u64` | `10` | — | Upstream Telegram connect timeout. |
 | client_keepalive | `u64` | `15` | — | Client keepalive timeout. |
 | client_ack | `u64` | `90` | — | Client ACK timeout. |
 | me_one_retry | `u8` | `12` | none | Fast reconnect attempts budget for single-endpoint DC scenarios. |

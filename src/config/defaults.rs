@@ -302,7 +302,7 @@ pub(crate) fn default_me2dc_fallback() -> bool {
 }
 
 pub(crate) fn default_me2dc_fast() -> bool {
-    false
+    true
 }
 
 pub(crate) fn default_keepalive_interval() -> u64 {

@@ -1,3 +1,19 @@
+# Very quick start
+
+### One-command installation / update on re-run
+```bash
+curl -fsSL https://raw.githubusercontent.com/telemt/telemt/main/install.sh | sh
+```
+### Installing a specific version
+```bash
+curl -fsSL https://raw.githubusercontent.com/telemt/telemt/main/install.sh | sh -s -- 3.3.39
+```
+
+### Uninstall with full cleanup
+```bash
+curl -fsSL https://raw.githubusercontent.com/telemt/telemt/main/install.sh | sh -s -- purge
+```
+
 # Telemt via Systemd
 
 ## Installation

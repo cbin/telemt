@@ -13,7 +13,7 @@
 
 <p align="center">
   <a href="https://t.me/telemtrs">
-    <img src="docs/assets/telegram_button.png" alt="Join us in Telegram" width="200" />
+    <img src="/docs/assets/telegram_button.svg" width="200"/>
   </a>
 </p>
 
@@ -26,9 +26,9 @@
 
 ![telemt_scheme](docs/assets/telemt.png)
 
-⚓ Our implementation of **TLS-fronting** is one of the most deeply debugged, focused, advanced and *almost* **"behaviorally consistent to real"**:  we are confident we have it right - [see evidence on our validation and traces](#recognizability-for-dpi-and-crawler)
+Our implementation of **TLS-fronting** is one of the most deeply debugged, focused, advanced and *almost* **"behaviorally consistent to real"**:  we are confident we have it right - [see evidence on our validation and traces](docs/FAQ.en.md#recognizability-for-dpi-and-crawler)
 
-⚓ Our ***Middle-End Pool*** is fastest by design in standard scenarios, compared to other implementations of connecting to the Middle-End Proxy: non dramatically, but usual
+Our ***Middle-End Pool*** is fastest by design in standard scenarios, compared to other implementations of connecting to the Middle-End Proxy: non dramatically, but usual
 
 - Full support for all official MTProto proxy modes:
   - Classic;
@@ -39,6 +39,12 @@
 - Configurable keepalives + timeouts + IPv6 and "Fast Mode";
 - Graceful shutdown on Ctrl+C;
 - Extensive logging via `trace` and `debug` with `RUST_LOG` method.
+
+## One-command installation (update on re-ru)
+```bash
+curl -fsSL https://raw.githubusercontent.com/telemt/telemt/main/install.sh | sh
+```
+See more in the [Quick Start Guide](docs/Quick_start/QUICK_START_GUIDE.en.md).
 
 # GOTO
 - [FAQ](#faq)

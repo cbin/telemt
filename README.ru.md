@@ -2,7 +2,7 @@
 
 ***Решает проблемы раньше, чем другие узнают об их существовании***
 
-> [!Примечание]
+> [!NOTE]
 >
 > Исправленный TLS ClientHello доступен в **Telegram Desktop** начиная с версии **6.7.2**: для работы с EE-MTProxy обновите клиент.
 >
@@ -10,14 +10,14 @@
 
 <p align="center">
   <a href="https://t.me/telemtrs">
-    <img src="docs/assets/telegram_button.png" alt="Мы в Telegram" width="200" />
+    <img src="/docs/assets/telegram_button.svg" width="200"/>
   </a>
 </p>
 
 **Telemt** — это быстрый, безопасный и функциональный сервер, написанный на Rust. Он полностью реализует официальный алгоритм прокси Telegram и добавляет множество улучшений для продакшена:
 
-- [ME Pool + Reader/Writer + Registry + Refill + Adaptive Floor + Trio-State + жизненный цикл генераций](https://github.com/telemt/telemt/blob/main/docs/model/MODEL.en.md);
-- [Полноценный API с управлением](https://github.com/telemt/telemt/blob/main/docs/API.md);
+- [ME Pool + Reader/Writer + Registry + Refill + Adaptive Floor + Trio-State + жизненный цикл генераций](https://github.com/telemt/telemt/blob/main/docs/Architecture/Model/MODEL.en.md);
+- [Полноценный API с управлением](https://github.com/telemt/telemt/blob/main/docs/Architecture/API/API.md);
 - Защита от повторных атак (Anti-Replay on Sliding Window);
 - Метрики в формате Prometheus;
 - TLS-fronting и TCP-splicing для маскировки от DPI.
@@ -26,9 +26,9 @@
 
 ## Особенности
 
-⚓ Реализация **TLS-fronting** максимально приближена к поведению реального HTTPS-трафика.
+Реализация **TLS-fronting** максимально приближена к поведению реального HTTPS-трафика (подробнее - [FAQ](docs/FAQ.ru.md#распознаваемость-для-dpi-и-сканеров)).
 
-⚓ ***Middle-End Pool*** оптимизирован для высокой производительности.
+***Middle-End Pool*** оптимизирован для высокой производительности.
 
 - Поддержка всех режимов MTProto proxy:
   - Classic;
@@ -39,6 +39,14 @@
 - Настраиваемые keepalive, таймауты, IPv6 и «быстрый режим»;
 - Корректное завершение работы (Ctrl+C);
 - Подробное логирование через `trace` и `debug`.
+
+
+## Быстрая установка (обновление при повторном запуске)
+```bash
+curl -fsSL https://raw.githubusercontent.com/telemt/telemt/main/install.sh | sh
+```
+
+Подробнее об установке в [Quick Start Guide](docs/Quick_start/QUICK_START_GUIDE.ru.md).
 
 # Навигация
 - [FAQ](#faq)
@@ -100,24 +108,3 @@ telemt config.toml
 - Безопасность памяти;
 - Асинхронная архитектура Tokio.
 
-## Известные проблемы
-
-- ✅ [Поддержка SOCKS5 как upstream](https://github.com/telemt/telemt/issues/1) -> добавлен Upstream Management;
-- ✅ [Проблема зависания загрузки медиа на iOS](https://github.com/telemt/telemt/issues/2).
-
-## Планы
-
-- Публичный IP в ссылках;
-- Перезагрузка конфигурации на лету;
-- Привязка к устройству или IP для входящих и исходящих соединений;
-- Поддержка рекламных тегов по SNI / секретному ключу;
-- Улучшенная обработка ошибок;
-- Zero-copy оптимизации;
-- Проверка состояния дата-центров;
-- Отсутствие глобального изменяемого состояния;
-- Изоляция клиентов и справедливое распределение трафика;
-- «Политика секретов» — маршрутизация по SNI / секрету;
-- Балансировщик с несколькими источниками и отработка отказов;
-- Строгие FSM для handshake;
-- Улучшенная защита от replay-атак;
-- Веб-интерфейс: статистика, состояние работоспособности, задержка, пользовательский опыт...

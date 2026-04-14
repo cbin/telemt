@@ -2268,37 +2268,40 @@ Note: This section also accepts the legacy alias `[server.admin_api]` (same sche
 
 | Key | Type | Default |
 | --- | ---- | ------- |
-| [`tls_domain`](#tls_domain) | `String` | `"petrovich.ru"` |
-| [`tls_domains`](#tls_domains) | `String[]` | `[]` |
-| [`unknown_sni_action`](#unknown_sni_action) | `"drop"`, `"mask"`, `"accept"` | `"drop"` |
-| [`tls_fetch_scope`](#tls_fetch_scope) | `String` | `""` |
-| [`tls_fetch`](#tls_fetch) | `Table` | built-in defaults |
-| [`mask`](#mask) | `bool` | `true` |
-| [`mask_host`](#mask_host) | `String` | — |
-| [`mask_port`](#mask_port) | `u16` | `443` |
-| [`mask_unix_sock`](#mask_unix_sock) | `String` | — |
-| [`fake_cert_len`](#fake_cert_len) | `usize` | `2048` |
-| [`tls_emulation`](#tls_emulation) | `bool` | `true` |
-| [`tls_front_dir`](#tls_front_dir) | `String` | `"tlsfront"` |
-| [`server_hello_delay_min_ms`](#server_hello_delay_min_ms) | `u64` | `0` |
-| [`server_hello_delay_max_ms`](#server_hello_delay_max_ms) | `u64` | `0` |
-| [`tls_new_session_tickets`](#tls_new_session_tickets) | `u8` | `0` |
-| [`tls_full_cert_ttl_secs`](#tls_full_cert_ttl_secs) | `u64` | `90` |
-| [`alpn_enforce`](#alpn_enforce) | `bool` | `true` |
-| [`mask_proxy_protocol`](#mask_proxy_protocol) | `u8` | `0` |
-| [`mask_shape_hardening`](#mask_shape_hardening) | `bool` | `true` |
-| [`mask_shape_hardening_aggressive_mode`](#mask_shape_hardening_aggressive_mode) | `bool` | `false` |
-| [`mask_shape_bucket_floor_bytes`](#mask_shape_bucket_floor_bytes) | `usize` | `512` |
-| [`mask_shape_bucket_cap_bytes`](#mask_shape_bucket_cap_bytes) | `usize` | `4096` |
-| [`mask_shape_above_cap_blur`](#mask_shape_above_cap_blur) | `bool` | `false` |
-| [`mask_shape_above_cap_blur_max_bytes`](#mask_shape_above_cap_blur_max_bytes) | `usize` | `512` |
-| [`mask_relay_max_bytes`](#mask_relay_max_bytes) | `usize` | `5242880` |
-| [`mask_classifier_prefetch_timeout_ms`](#mask_classifier_prefetch_timeout_ms) | `u64` | `5` |
-| [`mask_timing_normalization_enabled`](#mask_timing_normalization_enabled) | `bool` | `false` |
-| [`mask_timing_normalization_floor_ms`](#mask_timing_normalization_floor_ms) | `u64` | `0` |
-| [`mask_timing_normalization_ceiling_ms`](#mask_timing_normalization_ceiling_ms) | `u64` | `0` |
+| [`tls_domain`](#cfg-censorship-tls_domain) | `String` | `"petrovich.ru"` |
+| [`tls_domains`](#cfg-censorship-tls_domains) | `String[]` | `[]` |
+| [`unknown_sni_action`](#cfg-censorship-unknown_sni_action) | `"drop"`, `"mask"`, `"accept"` | `"drop"` |
+| [`tls_fetch_scope`](#cfg-censorship-tls_fetch_scope) | `String` | `""` |
+| [`tls_fetch`](#cfg-censorship-tls_fetch) | `Table` | built-in defaults |
+| [`mask`](#cfg-censorship-mask) | `bool` | `true` |
+| [`mask_host`](#cfg-censorship-mask_host) | `String` | — |
+| [`mask_port`](#cfg-censorship-mask_port) | `u16` | `443` |
+| [`mask_unix_sock`](#cfg-censorship-mask_unix_sock) | `String` | — |
+| [`fake_cert_len`](#cfg-censorship-fake_cert_len) | `usize` | `2048` |
+| [`tls_emulation`](#cfg-censorship-tls_emulation) | `bool` | `true` |
+| [`tls_front_dir`](#cfg-censorship-tls_front_dir) | `String` | `"tlsfront"` |
+| [`server_hello_delay_min_ms`](#cfg-censorship-server_hello_delay_min_ms) | `u64` | `0` |
+| [`server_hello_delay_max_ms`](#cfg-censorship-server_hello_delay_max_ms) | `u64` | `0` |
+| [`tls_new_session_tickets`](#cfg-censorship-tls_new_session_tickets) | `u8` | `0` |
+| [`tls_full_cert_ttl_secs`](#cfg-censorship-tls_full_cert_ttl_secs) | `u64` | `90` |
+| [`alpn_enforce`](#cfg-censorship-alpn_enforce) | `bool` | `true` |
+| [`mask_proxy_protocol`](#cfg-censorship-mask_proxy_protocol) | `u8` | `0` |
+| [`mask_shape_hardening`](#cfg-censorship-mask_shape_hardening) | `bool` | `true` |
+| [`mask_shape_hardening_aggressive_mode`](#cfg-censorship-mask_shape_hardening_aggressive_mode) | `bool` | `false` |
+| [`mask_shape_bucket_floor_bytes`](#cfg-censorship-mask_shape_bucket_floor_bytes) | `usize` | `512` |
+| [`mask_shape_bucket_cap_bytes`](#cfg-censorship-mask_shape_bucket_cap_bytes) | `usize` | `4096` |
+| [`mask_shape_above_cap_blur`](#cfg-censorship-mask_shape_above_cap_blur) | `bool` | `false` |
+| [`mask_shape_above_cap_blur_max_bytes`](#cfg-censorship-mask_shape_above_cap_blur_max_bytes) | `usize` | `512` |
+| [`mask_relay_max_bytes`](#cfg-censorship-mask_relay_max_bytes) | `usize` | `5242880` |
+| [`mask_relay_timeout_ms`](#cfg-censorship-mask_relay_timeout_ms) | `u64` | `60_000` |
+| [`mask_relay_idle_timeout_ms`](#cfg-censorship-mask_relay_idle_timeout_ms) | `u64` | `5_000` |
+| [`mask_classifier_prefetch_timeout_ms`](#cfg-censorship-mask_classifier_prefetch_timeout_ms) | `u64` | `5` |
+| [`mask_timing_normalization_enabled`](#cfg-censorship-mask_timing_normalization_enabled) | `bool` | `false` |
+| [`mask_timing_normalization_floor_ms`](#cfg-censorship-mask_timing_normalization_floor_ms) | `u64` | `0` |
+| [`mask_timing_normalization_ceiling_ms`](#cfg-censorship-mask_timing_normalization_ceiling_ms) | `u64` | `0` |
 
-## tls_domain
+## "cfg-censorship-tls_domain"
+- `tls_domain`
   - **Constraints / validation**: Must be a non-empty domain name. Must not contain spaces or `/`.
   - **Description**: Primary domain used for Fake-TLS masking / fronting profile and as the default SNI domain presented to clients. 
     This value becomes part of generated `ee` links, and changing it invalidates previously generated links.
@@ -2539,7 +2542,28 @@ Note: This section also accepts the legacy alias `[server.admin_api]` (same sche
     [censorship]
     mask_relay_max_bytes = 5242880
     ```
-## mask_classifier_prefetch_timeout_ms
+## "cfg-censorship-mask_relay_timeout_ms"
+- `mask_relay_timeout_ms`
+  - **Constraints / validation**: Should be `>= mask_relay_idle_timeout_ms`.
+  - **Description**: Wall-clock cap for the full masking relay on non-MTProto fallback paths. Raise when the mask target is a long-lived service (e.g. WebSocket). Default: 60 000 ms (1 minute).
+  - **Example**:
+
+    ```toml
+    [censorship]
+    mask_relay_timeout_ms = 60000
+    ```
+## "cfg-censorship-mask_relay_idle_timeout_ms"
+- `mask_relay_idle_timeout_ms`
+  - **Constraints / validation**: Should be `<= mask_relay_timeout_ms`.
+  - **Description**: Per-read idle timeout on masking relay and drain paths. Limits resource consumption by slow-loris attacks and port scanners. A read call stalling beyond this value is treated as an abandoned connection. Default: 5 000 ms (5 s).
+  - **Example**:
+
+    ```toml
+    [censorship]
+    mask_relay_idle_timeout_ms = 5000
+    ```
+## "cfg-censorship-mask_classifier_prefetch_timeout_ms"
+- `mask_classifier_prefetch_timeout_ms`
   - **Constraints / validation**: Must be within `[5, 50]` (milliseconds).
   - **Description**: Timeout budget (ms) for extending fragmented initial classifier window on masking fallback.
   - **Example**:

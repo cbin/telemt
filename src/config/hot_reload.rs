@@ -560,6 +560,7 @@ fn warn_non_hot_changes(old: &ProxyConfig, new: &ProxyConfig, non_hot_changed: b
     if old.server.api.enabled != new.server.api.enabled
         || old.server.api.listen != new.server.api.listen
         || old.server.api.whitelist != new.server.api.whitelist
+        || old.server.api.gray_action != new.server.api.gray_action
         || old.server.api.auth_header != new.server.api.auth_header
         || old.server.api.request_body_limit_bytes != new.server.api.request_body_limit_bytes
         || old.server.api.minimal_runtime_enabled != new.server.api.minimal_runtime_enabled

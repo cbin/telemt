@@ -1183,6 +1183,13 @@ pub struct ApiConfig {
     #[serde(default = "default_api_whitelist")]
     pub whitelist: Vec<IpNetwork>,
 
+    /// Behavior for requests from source IPs outside `whitelist`.
+    /// - `api`: return structured API forbidden response.
+    /// - `200`: return `200 OK` with an empty body.
+    /// - `drop`: close the connection without HTTP response.
+    #[serde(default)]
+    pub gray_action: ApiGrayAction,
+
     /// Optional static value for `Authorization` header validation.
     /// Empty string disables header auth.
     #[serde(default)]
@@ -1227,6 +1234,7 @@ impl Default for ApiConfig {
             enabled: default_true(),
             listen: default_api_listen(),
             whitelist: default_api_whitelist(),
+            gray_action: ApiGrayAction::default(),
             auth_header: String::new(),
             request_body_limit_bytes: default_api_request_body_limit_bytes(),
             minimal_runtime_enabled: default_api_minimal_runtime_enabled(),
@@ -1238,6 +1246,19 @@ impl Default for ApiConfig {
             read_only: false,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ApiGrayAction {
+    /// Preserve current API behavior for denied source IPs.
+    Api,
+    /// Mimic a plain web endpoint by returning `200 OK` with an empty body.
+    #[serde(rename = "200")]
+    Ok200,
+    /// Drop connection without HTTP response for denied source IPs.
+    #[default]
+    Drop,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]

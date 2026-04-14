@@ -1,6 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 
-use std::convert::Infallible;
+use std::io::{Error as IoError, ErrorKind};
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -16,7 +16,7 @@ use tokio::net::TcpListener;
 use tokio::sync::{Mutex, RwLock, watch};
 use tracing::{debug, info, warn};
 
-use crate::config::ProxyConfig;
+use crate::config::{ApiGrayAction, ProxyConfig};
 use crate::ip_tracker::UserIpTracker;
 use crate::proxy::route_mode::RouteRuntimeController;
 use crate::startup::StartupTracker;
@@ -184,7 +184,9 @@ pub async fn serve(
                 .serve_connection(hyper_util::rt::TokioIo::new(stream), svc)
                 .await
             {
-                debug!(error = %error, "API connection error");
+                if !error.is_user() {
+                    debug!(error = %error, "API connection error");
+                }
             }
         });
     }
@@ -195,7 +197,7 @@ async fn handle(
     peer: SocketAddr,
     shared: Arc<ApiShared>,
     config_rx: watch::Receiver<Arc<ProxyConfig>>,
-) -> Result<Response<Full<Bytes>>, Infallible> {
+) -> Result<Response<Full<Bytes>>, IoError> {
     let request_id = shared.next_request_id();
     let cfg = config_rx.borrow().clone();
     let api_cfg = &cfg.server.api;
@@ -213,14 +215,27 @@ async fn handle(
 
     if !api_cfg.whitelist.is_empty() && !api_cfg.whitelist.iter().any(|net| net.contains(peer.ip()))
     {
-        return Ok(error_response(
-            request_id,
-            ApiFailure::new(
-                StatusCode::FORBIDDEN,
-                "forbidden",
-                "Source IP is not allowed",
+        return match api_cfg.gray_action {
+            ApiGrayAction::Api => Ok(error_response(
+                request_id,
+                ApiFailure::new(
+                    StatusCode::FORBIDDEN,
+                    "forbidden",
+                    "Source IP is not allowed",
+                ),
+            )),
+            ApiGrayAction::Ok200 => Ok(
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header("content-type", "text/html; charset=utf-8")
+                    .body(Full::new(Bytes::new()))
+                    .unwrap(),
             ),
-        ));
+            ApiGrayAction::Drop => Err(IoError::new(
+                ErrorKind::ConnectionAborted,
+                "api request dropped by gray_action=drop",
+            )),
+        };
     }
 
     if !api_cfg.auth_header.is_empty() {

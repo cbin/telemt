@@ -1492,6 +1492,7 @@ mod tests {
         assert_eq!(cfg.censorship.unknown_sni_action, UnknownSniAction::Drop);
         assert_eq!(cfg.server.api.listen, default_api_listen());
         assert_eq!(cfg.server.api.whitelist, default_api_whitelist());
+        assert_eq!(cfg.server.api.gray_action, ApiGrayAction::Drop);
         assert_eq!(
             cfg.server.api.request_body_limit_bytes,
             default_api_request_body_limit_bytes()
@@ -1662,6 +1663,7 @@ mod tests {
         );
         assert_eq!(server.api.listen, default_api_listen());
         assert_eq!(server.api.whitelist, default_api_whitelist());
+        assert_eq!(server.api.gray_action, ApiGrayAction::Drop);
         assert_eq!(
             server.api.request_body_limit_bytes,
             default_api_request_body_limit_bytes()
@@ -1807,6 +1809,59 @@ mod tests {
             cfg_accept.censorship.unknown_sni_action,
             UnknownSniAction::Accept
         );
+    }
+
+    #[test]
+    fn api_gray_action_parses_and_defaults_to_drop() {
+        let cfg_default: ProxyConfig = toml::from_str(
+            r#"
+            [server]
+            [general]
+            [network]
+            [access]
+            "#,
+        )
+        .unwrap();
+        assert_eq!(cfg_default.server.api.gray_action, ApiGrayAction::Drop);
+
+        let cfg_api: ProxyConfig = toml::from_str(
+            r#"
+            [server]
+            [general]
+            [network]
+            [access]
+            [server.api]
+            gray_action = "api"
+            "#,
+        )
+        .unwrap();
+        assert_eq!(cfg_api.server.api.gray_action, ApiGrayAction::Api);
+
+        let cfg_200: ProxyConfig = toml::from_str(
+            r#"
+            [server]
+            [general]
+            [network]
+            [access]
+            [server.api]
+            gray_action = "200"
+            "#,
+        )
+        .unwrap();
+        assert_eq!(cfg_200.server.api.gray_action, ApiGrayAction::Ok200);
+
+        let cfg_drop: ProxyConfig = toml::from_str(
+            r#"
+            [server]
+            [general]
+            [network]
+            [access]
+            [server.api]
+            gray_action = "drop"
+            "#,
+        )
+        .unwrap();
+        assert_eq!(cfg_drop.server.api.gray_action, ApiGrayAction::Drop);
     }
 
     #[test]

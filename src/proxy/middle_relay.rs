@@ -1814,40 +1814,6 @@ where
                 let downstream_ms = last_downstream_activity_ms.load(Ordering::Relaxed);
                 let hard_deadline =
                     hard_deadline(idle_policy, idle_state, session_started_at, downstream_ms);
-                if now >= hard_deadline {
-                    clear_relay_idle_candidate_in(shared, forensics.conn_id);
-                    stats.increment_relay_idle_hard_close_total();
-                    let client_idle_secs = now
-                        .saturating_duration_since(idle_state.last_client_frame_at)
-                        .as_secs();
-                    let downstream_idle_secs = now
-                        .saturating_duration_since(
-                            session_started_at + Duration::from_millis(downstream_ms),
-                        )
-                        .as_secs();
-                    warn!(
-                        trace_id = format_args!("0x{:016x}", forensics.trace_id),
-                        conn_id = forensics.conn_id,
-                        user = %forensics.user,
-                        read_label,
-                        client_idle_secs,
-                        downstream_idle_secs,
-                        soft_idle_secs = idle_policy.soft_idle.as_secs(),
-                        hard_idle_secs = idle_policy.hard_idle.as_secs(),
-                        grace_secs = idle_policy.grace_after_downstream_activity.as_secs(),
-                        "Middle-relay hard idle close"
-                    );
-                    return Err(ProxyError::Io(std::io::Error::new(
-                        std::io::ErrorKind::TimedOut,
-                        format!(
-                            "middle-relay hard idle timeout while reading {read_label}: client_idle_secs={client_idle_secs}, downstream_idle_secs={downstream_idle_secs}, soft_idle_secs={}, hard_idle_secs={}, grace_secs={}",
-                            idle_policy.soft_idle.as_secs(),
-                            idle_policy.hard_idle.as_secs(),
-                            idle_policy.grace_after_downstream_activity.as_secs(),
-                        ),
-                    )));
-                }
-
                 if !idle_state.soft_idle_marked
                     && now.saturating_duration_since(idle_state.last_client_frame_at)
                         >= idle_policy.soft_idle
@@ -1902,7 +1868,45 @@ where
                         ),
                     )));
                 }
-                Err(_) => {}
+                Err(_) => {
+                    let now = Instant::now();
+                    let downstream_ms = last_downstream_activity_ms.load(Ordering::Relaxed);
+                    let hard_deadline =
+                        hard_deadline(idle_policy, idle_state, session_started_at, downstream_ms);
+                    if now >= hard_deadline {
+                        clear_relay_idle_candidate_in(shared, forensics.conn_id);
+                        stats.increment_relay_idle_hard_close_total();
+                        let client_idle_secs = now
+                            .saturating_duration_since(idle_state.last_client_frame_at)
+                            .as_secs();
+                        let downstream_idle_secs = now
+                            .saturating_duration_since(
+                                session_started_at + Duration::from_millis(downstream_ms),
+                            )
+                            .as_secs();
+                        warn!(
+                            trace_id = format_args!("0x{:016x}", forensics.trace_id),
+                            conn_id = forensics.conn_id,
+                            user = %forensics.user,
+                            read_label,
+                            client_idle_secs,
+                            downstream_idle_secs,
+                            soft_idle_secs = idle_policy.soft_idle.as_secs(),
+                            hard_idle_secs = idle_policy.hard_idle.as_secs(),
+                            grace_secs = idle_policy.grace_after_downstream_activity.as_secs(),
+                            "Middle-relay hard idle close"
+                        );
+                        return Err(ProxyError::Io(std::io::Error::new(
+                            std::io::ErrorKind::TimedOut,
+                            format!(
+                                "middle-relay hard idle timeout while reading {read_label}: client_idle_secs={client_idle_secs}, downstream_idle_secs={downstream_idle_secs}, soft_idle_secs={}, hard_idle_secs={}, grace_secs={}",
+                                idle_policy.soft_idle.as_secs(),
+                                idle_policy.hard_idle.as_secs(),
+                                idle_policy.grace_after_downstream_activity.as_secs(),
+                            ),
+                        )));
+                    }
+                }
             }
         }
 
